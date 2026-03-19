@@ -320,14 +320,25 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, size int64
 	if isTodo(full) {
 		parts := strings.SplitN(full, "/", 3) // todos/<id>/...
 		if len(parts) >= 2 {
-			w.WriteField("todoId", parts[1])
+			if err := w.WriteField("todoId", parts[1]); err != nil {
+				return nil, fmt.Errorf("upload: write todoId field: %w", err)
+			}
 		}
 	} else if dir := path.Dir(full); dir != "." && dir != "" {
-		w.WriteField("folderPath", dir)
+		if err := w.WriteField("folderPath", dir); err != nil {
+			return nil, fmt.Errorf("upload: write folderPath field: %w", err)
+		}
 	}
-	part, _ := w.CreateFormFile("file", name)
-	io.Copy(part, in)
-	w.Close()
+	part, err := w.CreateFormFile("file", name)
+	if err != nil {
+		return nil, fmt.Errorf("upload: create form file: %w", err)
+	}
+	if _, err := io.Copy(part, in); err != nil {
+		return nil, fmt.Errorf("upload: copy file data: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("upload: close multipart writer: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(f.opt.URL, "/")+"/api/v1/resources/register", &buf)
 	if err != nil {
@@ -349,7 +360,9 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, size int64
 	}
 
 	var res uploadResult
-	json.NewDecoder(resp.Body).Decode(&res)
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, fmt.Errorf("upload: decode response: %w", err)
+	}
 	return &Object{fs: f, remote: remote, size: res.FileSize, modTime: time.UnixMilli(res.CreatedAt), mimeType: mt, uri: res.URI, id: res.AttachmentID}, nil
 }
 
