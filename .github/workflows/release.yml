@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Create build entry point
+        run: |
+          cat > main.go << 'GOEOF'
+          package main
+
+          import (
+            _ "github.com/rclone/rclone/backend/all"
+            _ "github.com/todoforai/rclone-backend/backend/todoforai"
+            "github.com/rclone/rclone/cmd"
+            _ "github.com/rclone/rclone/cmd/all"
+            _ "github.com/rclone/rclone/lib/plugin"
+          )
+
+          func main() { cmd.Main() }
+          GOEOF
+          go mod tidy
+
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          EXT=""; [ "$GOOS" = "windows" ] && EXT=".exe"
+          go build -ldflags="-s -w" -o "rclone${EXT}" .
+
+      - name: Package
+        run: |
+          EXT=""; [ "${{ matrix.goos }}" = "windows" ] && EXT=".exe"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "rclone-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "rclone${EXT}"
+          else
+            tar czf "rclone-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "rclone${EXT}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rclone-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: rclone-*.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: rclone-*.*
