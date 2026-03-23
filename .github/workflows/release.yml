@@ -52,8 +52,10 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          TAG="${GITHUB_REF_NAME}"
+          LDFLAGS="-s -w -X github.com/rclone/rclone/fs.Version=todoforai-${TAG}"
           EXT=""; [ "$GOOS" = "windows" ] && EXT=".exe"
-          go build -ldflags="-s -w" -o "rclone${EXT}" .
+          go build -ldflags="${LDFLAGS}" -o "rclone${EXT}" .
 
       - name: Package
         run: |
