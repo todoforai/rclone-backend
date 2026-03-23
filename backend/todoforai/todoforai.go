@@ -1,6 +1,6 @@
 // Package todoforai provides an rclone backend for todofor.ai.
 //
-// Path mapping: todoforai:path → todoforai://path. That's it.
+// Path mapping: todoforai:path → todoforai:path (rclone-style, no authority).
 // "todos/" is reserved for TODO attachments.
 package todoforai
 
@@ -156,7 +156,7 @@ func (f *Fs) uri(remote string) string {
 		}
 		p += remote
 	}
-	return "todoforai://" + p
+	return "todoforai:" + p
 }
 
 // ---- API helpers ----
@@ -275,9 +275,9 @@ func (f *Fs) Mkdir(ctx context.Context, dir string) error {
 	if full == "" || isTodo(full) {
 		return nil
 	}
-	parent, name := "todoforai://", full
+	parent, name := "todoforai:", full
 	if i := strings.LastIndex(full, "/"); i >= 0 {
-		parent = "todoforai://" + full[:i]
+		parent = "todoforai:" + full[:i]
 		name = full[i+1:]
 	}
 	b, _ := json.Marshal(map[string]string{"parentUri": parent, "name": name})
@@ -286,7 +286,7 @@ func (f *Fs) Mkdir(ctx context.Context, dir string) error {
 
 func (f *Fs) Rmdir(ctx context.Context, dir string) error {
 	uri := f.uri(dir)
-	if uri == "todoforai://" {
+	if uri == "todoforai:" {
 		return fmt.Errorf("cannot remove root")
 	}
 	full := f.root

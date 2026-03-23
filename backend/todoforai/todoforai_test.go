@@ -12,9 +12,9 @@ import (
 func TestUri(t *testing.T) {
 	f := &Fs{root: ""}
 	for _, tt := range []struct{ remote, want string }{
-		{"", "todoforai://"},
-		{"docs/report.pdf", "todoforai://docs/report.pdf"},
-		{"todos/abc/att", "todoforai://todos/abc/att"},
+		{"", "todoforai:"},
+		{"docs/report.pdf", "todoforai:docs/report.pdf"},
+		{"todos/abc/att", "todoforai:todos/abc/att"},
 	} {
 		if got := f.uri(tt.remote); got != tt.want {
 			t.Errorf("uri(%q) = %q, want %q", tt.remote, got, tt.want)
@@ -23,8 +23,8 @@ func TestUri(t *testing.T) {
 
 	f2 := &Fs{root: "project"}
 	for _, tt := range []struct{ remote, want string }{
-		{"", "todoforai://project"},
-		{"file.txt", "todoforai://project/file.txt"},
+		{"", "todoforai:project"},
+		{"file.txt", "todoforai:project/file.txt"},
 	} {
 		if got := f2.uri(tt.remote); got != tt.want {
 			t.Errorf("uri(%q) with root = %q, want %q", tt.remote, got, tt.want)

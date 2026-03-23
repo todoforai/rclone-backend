@@ -61,7 +61,7 @@ rclone ls todoforai:
 
 ## Path mapping
 
-The mapping is trivial: `todoforai:path` → `todoforai://path`.
+The mapping is trivial: `todoforai:path` → `todoforai:path` (rclone-style, no authority).
 
 That's it. The backend handles all URI routing.
 
