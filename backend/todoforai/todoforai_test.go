@@ -2,15 +2,20 @@ package todoforai
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rclone/rclone/fs/config/configmap"
+	"github.com/rclone/rclone/lib/encoder"
 )
 
+// defaultEnc matches the encoder configured in init().
+var defaultEnc = encoder.Standard | encoder.EncodeInvalidUtf8
+
 func TestUri(t *testing.T) {
-	f := &Fs{root: ""}
+	f := &Fs{root: "", opt: Options{Enc: defaultEnc}}
 	for _, tt := range []struct{ remote, want string }{
 		{"", "todoforai:"},
 		{"docs/report.pdf", "todoforai:docs/report.pdf"},
@@ -21,7 +26,7 @@ func TestUri(t *testing.T) {
 		}
 	}
 
-	f2 := &Fs{root: "project"}
+	f2 := &Fs{root: "project", opt: Options{Enc: defaultEnc}}
 	for _, tt := range []struct{ remote, want string }{
 		{"", "todoforai:project"},
 		{"file.txt", "todoforai:project/file.txt"},
@@ -33,7 +38,10 @@ func TestUri(t *testing.T) {
 }
 
 func TestIsTodo(t *testing.T) {
-	for _, tt := range []struct{ p string; want bool }{
+	for _, tt := range []struct {
+		p    string
+		want bool
+	}{
 		{"todos", true}, {"todos/abc", true}, {"todos/a/b", true},
 		{"docs", false}, {"docs/todos", false}, {"todosfoo", false},
 	} {
@@ -68,20 +76,28 @@ func TestGuessMime(t *testing.T) {
 
 // ---- integration (needs TODOFORAI_API_KEY) ----
 
-func client(t *testing.T) *Fs {
+func newTestFs(t *testing.T) *Fs {
 	key := os.Getenv("TODOFORAI_API_KEY")
 	if key == "" {
 		t.Skip("TODOFORAI_API_KEY not set")
 	}
-	u := os.Getenv("TODOFORAI_URL")
-	if u == "" {
-		u = defaultURL
+	apiURL := os.Getenv("TODOFORAI_URL")
+	if apiURL == "" {
+		apiURL = defaultURL
 	}
-	return &Fs{opt: Options{URL: u, APIKey: key}, http: &http.Client{Timeout: 30 * time.Second}}
+	m := configmap.Simple{
+		"url":     apiURL,
+		"api_key": key,
+	}
+	fsInterface, err := NewFs(context.Background(), "TestTodoforai", "", m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fsInterface.(*Fs)
 }
 
 func TestIntegrationUploadAndDelete(t *testing.T) {
-	f := client(t)
+	f := newTestFs(t)
 	ctx := context.Background()
 
 	obj, err := f.upload(ctx, "rclone-test.txt", strings.NewReader("hello"), 5)
@@ -101,3 +117,8 @@ func TestIntegrationUploadAndDelete(t *testing.T) {
 	}
 	t.Log("deleted")
 }
+
+// NOTE: When submitting upstream to rclone/rclone, add the standard
+// integration test suite reference:
+//   var _ = fstests.TestFs
+// This requires building inside the rclone monorepo.
