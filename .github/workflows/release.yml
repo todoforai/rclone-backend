@@ -115,4 +115,9 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: rclone-*.*
+          # Two patterns: `rclone-*.*` matches the public tarballs/zips and the
+          # .sha256 files; `rclone-sandbox-linux-*` also matches the raw,
+          # extensionless slim binaries (which `*.*` would skip).
+          files: |
+            rclone-*.*
+            rclone-sandbox-linux-*
