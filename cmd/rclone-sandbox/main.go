@@ -11,6 +11,10 @@ package main
 
 import (
 	_ "github.com/todoforai/rclone-backend/backend/todoforai"
+	// The local backend backs `--vfs-cache-mode full` (the write-back cache is
+	// stored on the local FS). Without it rclone silently disables the VFS
+	// cache ("didn't find backend called local"), breaking buffered writes.
+	_ "github.com/rclone/rclone/backend/local"
 
 	"github.com/rclone/rclone/cmd"
 	_ "github.com/rclone/rclone/cmd/config"
