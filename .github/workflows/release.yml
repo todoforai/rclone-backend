@@ -115,9 +115,11 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          # Two patterns: `rclone-*.*` matches the public tarballs/zips and the
-          # .sha256 files; `rclone-sandbox-linux-*` also matches the raw,
-          # extensionless slim binaries (which `*.*` would skip).
+          # Non-overlapping globs (overlap → duplicate upload → 422/404 that
+          # fails the job): `rclone-*.*` catches everything WITH a dot (public
+          # tarballs/zips + all .sha256); `rclone-sandbox-linux-x64`/`-arm64`
+          # name the extensionless raw slim binaries that `*.*` would skip.
           files: |
             rclone-*.*
-            rclone-sandbox-linux-*
+            rclone-sandbox-linux-x64
+            rclone-sandbox-linux-arm64
