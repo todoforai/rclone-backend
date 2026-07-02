@@ -71,8 +71,42 @@ jobs:
           name: rclone-${{ matrix.goos }}-${{ matrix.goarch }}
           path: rclone-*.*
 
+  # Slim single-backend build baked into the todofor.ai sandbox OCI image.
+  # Only the todoforai backend + mount/config/ls commands (~16MB vs ~58MB), and
+  # published as a raw binary + .sha256 (not a tarball) so sync-vendor.sh can
+  # fetch+verify it the same way it does the bridge binary.
+  sandbox:
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            asset: x64
+          - goarch: arm64
+            asset: arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build slim rclone
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          LDFLAGS="-s -w -X github.com/rclone/rclone/fs.Version=todoforai-${TAG}"
+          OUT="rclone-sandbox-linux-${{ matrix.asset }}"
+          go build -ldflags="${LDFLAGS}" -o "$OUT" ./cmd/rclone-sandbox
+          sha256sum "$OUT" | awk '{print $1}' > "$OUT.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rclone-sandbox-linux-${{ matrix.asset }}
+          path: rclone-sandbox-linux-*
+
   release:
-    needs: build
+    needs: [build, sandbox]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
