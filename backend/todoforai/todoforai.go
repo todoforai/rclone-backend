@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/todoforai/rclone-backend/backend/todoforai/api"
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configmap"
@@ -27,6 +26,7 @@ import (
 	"github.com/rclone/rclone/lib/oauthutil"
 	"github.com/rclone/rclone/lib/pacer"
 	"github.com/rclone/rclone/lib/rest"
+	"github.com/todoforai/rclone-backend/backend/todoforai/api"
 	"golang.org/x/oauth2"
 )
 
@@ -51,6 +51,8 @@ func init() {
 	opts := []fs.Option{
 		{Name: "url", Help: "API server URL.", Default: defaultURL, Advanced: true},
 		{Name: "api_key", Help: "API key (alternative to OAuth browser login).\n\nGet yours at https://todofor.ai/settings/api-keys\nLeave blank to use OAuth instead.", Sensitive: true},
+		{Name: "device_id", Help: "Device ID (with device_secret: authenticate as an enrolled device; tokens are minted and renewed automatically).", Advanced: true},
+		{Name: "device_secret", Help: "Device secret paired with device_id.", Sensitive: true, Advanced: true},
 		{
 			Name:     config.ConfigEncoding,
 			Help:     config.ConfigEncodingHelp,
@@ -68,6 +70,9 @@ func init() {
 			if key, _ := m.Get("api_key"); key != "" {
 				return nil, nil // API key provided, skip OAuth
 			}
+			if secret, _ := m.Get("device_secret"); secret != "" {
+				return nil, nil // device credentials provided, skip OAuth
+			}
 			apiURL, _ := m.Get("url")
 			if apiURL == "" {
 				apiURL = defaultURL
@@ -83,9 +88,11 @@ func init() {
 
 // Options defines the configuration for the todoforai backend.
 type Options struct {
-	URL    string               `config:"url"`
-	APIKey string               `config:"api_key"`
-	Enc    encoder.MultiEncoder `config:"encoding"`
+	URL          string               `config:"url"`
+	APIKey       string               `config:"api_key"`
+	DeviceID     string               `config:"device_id"`
+	DeviceSecret string               `config:"device_secret"`
+	Enc          encoder.MultiEncoder `config:"encoding"`
 }
 
 // Fs represents a remote todofor.ai workspace.
@@ -124,9 +131,13 @@ func NewFs(ctx context.Context, name, root string, m configmap.Mapper) (fs.Fs, e
 	}
 
 	var httpClient *http.Client
-	if opt.APIKey != "" {
+	switch {
+	case opt.APIKey != "":
 		httpClient = fshttp.NewClient(ctx)
-	} else {
+	case opt.DeviceID != "" && opt.DeviceSecret != "":
+		httpClient = fshttp.NewClient(ctx)
+		httpClient.Transport = &deviceAuth{base: httpClient.Transport, apiURL: strings.TrimRight(opt.URL, "/"), id: opt.DeviceID, secret: opt.DeviceSecret}
+	default:
 		oauthClient, _, err := oauthutil.NewClient(ctx, name, m, makeOAuthConfig(opt.URL))
 		if err != nil {
 			return nil, fmt.Errorf("todoforai: auth failed: %w\nHint: provide api_key or run 'rclone config reconnect %s:'", err, name)
@@ -379,12 +390,12 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, size int64
 	}
 
 	opts := rest.Opts{
-		Method:                "POST",
-		Path:                  "/api/v1/resources/register",
-		Body:                  in,
-		MultipartParams:       params,
-		MultipartContentName:  "file",
-		MultipartFileName:     name,
+		Method:               "POST",
+		Path:                 "/api/v1/resources/register",
+		Body:                 in,
+		MultipartParams:      params,
+		MultipartContentName: "file",
+		MultipartFileName:    name,
 	}
 	var res api.UploadResult
 	// CallNoRetry: the input stream is consumed on first attempt and
@@ -402,15 +413,15 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, size int64
 
 // ---- fs.Object ----
 
-func (o *Object) Fs() fs.Info                                        { return o.fs }
-func (o *Object) Remote() string                                     { return o.remote }
-func (o *Object) Size() int64                                        { return o.size }
-func (o *Object) ModTime(ctx context.Context) time.Time              { return o.modTime }
-func (o *Object) Storable() bool                                     { return true }
-func (o *Object) String() string                                     { return o.remote }
-func (o *Object) MimeType(ctx context.Context) string                { return o.mimeType }
-func (o *Object) SetModTime(context.Context, time.Time) error        { return fs.ErrorCantSetModTime }
-func (o *Object) Hash(context.Context, hash.Type) (string, error)    { return "", hash.ErrUnsupported }
+func (o *Object) Fs() fs.Info                                     { return o.fs }
+func (o *Object) Remote() string                                  { return o.remote }
+func (o *Object) Size() int64                                     { return o.size }
+func (o *Object) ModTime(ctx context.Context) time.Time           { return o.modTime }
+func (o *Object) Storable() bool                                  { return true }
+func (o *Object) String() string                                  { return o.remote }
+func (o *Object) MimeType(ctx context.Context) string             { return o.mimeType }
+func (o *Object) SetModTime(context.Context, time.Time) error     { return fs.ErrorCantSetModTime }
+func (o *Object) Hash(context.Context, hash.Type) (string, error) { return "", hash.ErrUnsupported }
 
 // Open downloads the object.
 func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (io.ReadCloser, error) {
