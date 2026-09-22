@@ -244,7 +244,10 @@ func (f *Fs) List(ctx context.Context, dir string) (fs.DirEntries, error) {
 	token := ""
 	for {
 		var res api.ListResult
-		params := url.Values{"uri": {uri}, "pageSize": {"200"}}
+		// 1000: the virtual `todos/` folder holds one entry per todo a user ever attached to
+		// (thousands for active users) and rclone VFS must list it whole before any
+		// `todos/<id>` lookup — fewer round-trips keeps that under FUSE patience.
+		params := url.Values{"uri": {uri}, "pageSize": {"1000"}}
 		if token != "" {
 			params.Set("pageToken", token)
 		}
