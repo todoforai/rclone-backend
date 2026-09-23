@@ -244,10 +244,7 @@ func (f *Fs) List(ctx context.Context, dir string) (fs.DirEntries, error) {
 	token := ""
 	for {
 		var res api.ListResult
-		// 1000: the virtual `todos/` folder holds one entry per todo with attachments
-		// (thousands for active users) and rclone VFS lists it whole before any
-		// `todos/<id>` lookup. Tuning only — the server-side index is what made it fast.
-		params := url.Values{"uri": {uri}, "pageSize": {"1000"}}
+		params := url.Values{"uri": {uri}, "pageSize": {"200"}}
 		if token != "" {
 			params.Set("pageToken", token)
 		}
