@@ -34,3 +34,9 @@ type MkdirRequest struct {
 
 // FolderMimeType is the MIME type used for folders.
 const FolderMimeType = "application/vnd.todoforai.folder"
+
+// MoveRequest is the request body for a server-side move/rename (overwrites the target).
+type MoveRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}

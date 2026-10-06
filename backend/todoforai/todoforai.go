@@ -308,6 +308,29 @@ func (f *Fs) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo, options .
 	return f.upload(ctx, src.Remote(), in, fs.MimeType(ctx, src))
 }
 
+// Move renames src to remote server-side, overwriting any existing target.
+// Editors (`sed -i`, vim) write a temp file and rename it over the target; without
+// Move the VFS refuses the rename ("no server-side Move or Copy").
+func (f *Fs) Move(ctx context.Context, src fs.Object, remote string) (fs.Object, error) {
+	srcObj, ok := src.(*Object)
+	if !ok {
+		return nil, fs.ErrorCantMove
+	}
+	opts := rest.Opts{
+		Method: "POST",
+		Path:   "/api/v1/resources/move",
+	}
+	req := api.MoveRequest{From: srcObj.uri, To: f.uri(remote)}
+	err := f.pacer.Call(func() (bool, error) {
+		resp, err := f.srv.CallJSON(ctx, &opts, &req, nil)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return f.NewObject(ctx, remote)
+}
+
 // Mkdir creates a directory.
 func (f *Fs) Mkdir(ctx context.Context, dir string) error {
 	full := f.root
@@ -384,7 +407,13 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, mt string)
 		if len(parts) >= 2 {
 			params.Set("todoId", parts[1])
 		}
-	} else if dir := path.Dir(full); dir != "." && dir != "" {
+	} else {
+		// Always a folder path, "" for the root: without it the backend stores a flat
+		// blob that no directory listing (nor a later Move) can see.
+		dir := path.Dir(full)
+		if dir == "." {
+			dir = ""
+		}
 		params.Set("folderPath", f.encodePath(dir))
 	}
 
@@ -479,6 +508,7 @@ func msToTime(ms ...*int64) time.Time {
 }
 
 var (
+	_ fs.Mover     = (*Fs)(nil)
 	_ fs.Fs        = (*Fs)(nil)
 	_ fs.Object    = (*Object)(nil)
 	_ fs.MimeTyper = (*Object)(nil)
