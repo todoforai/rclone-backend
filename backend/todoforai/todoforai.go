@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -306,7 +305,7 @@ func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
 
 // Put uploads a new file.
 func (f *Fs) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (fs.Object, error) {
-	return f.upload(ctx, src.Remote(), in, src.Size())
+	return f.upload(ctx, src.Remote(), in, fs.MimeType(ctx, src))
 }
 
 // Mkdir creates a directory.
@@ -367,7 +366,7 @@ func (f *Fs) Rmdir(ctx context.Context, dir string) error {
 
 // ---- upload (shared by Put and Update) ----
 
-func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, size int64) (*Object, error) {
+func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, mt string) (*Object, error) {
 	full := f.root
 	if remote != "" {
 		if full != "" {
@@ -376,10 +375,10 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, size int64
 		full += remote
 	}
 	name := f.opt.Enc.Encode(path.Base(full))
-	mt := guessMime(name)
 
-	// Build multipart form fields.
-	params := url.Values{}
+	// Build multipart form fields. rclone's multipart file part is always
+	// application/octet-stream, so the real type travels as a field.
+	params := url.Values{"mime": {mt}}
 	if isTodo(full) {
 		parts := strings.SplitN(full, "/", 3) // todos/<id>/...
 		if len(parts) >= 2 {
@@ -445,7 +444,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (io.ReadClo
 
 // Update replaces the object contents.
 func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) error {
-	obj, err := o.fs.upload(ctx, o.remote, in, src.Size())
+	obj, err := o.fs.upload(ctx, o.remote, in, fs.MimeType(ctx, src))
 	if err != nil {
 		return err
 	}
@@ -470,12 +469,6 @@ func (o *Object) Remove(ctx context.Context) error {
 // ---- tiny helpers ----
 
 func isTodo(p string) bool { return strings.HasPrefix(p, "todos/") || p == "todos" }
-func guessMime(name string) string {
-	if t := mime.TypeByExtension(path.Ext(name)); t != "" {
-		return t
-	}
-	return "application/octet-stream"
-}
 func msToTime(ms ...*int64) time.Time {
 	for _, p := range ms {
 		if p != nil {

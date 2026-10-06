@@ -64,16 +64,6 @@ func TestMsToTime(t *testing.T) {
 	}
 }
 
-func TestGuessMime(t *testing.T) {
-	for _, tt := range []struct{ name, want string }{
-		{"a.pdf", "application/pdf"}, {"a.png", "image/png"}, {"x", "application/octet-stream"},
-	} {
-		if got := guessMime(tt.name); got != tt.want {
-			t.Errorf("guessMime(%q) = %q, want %q", tt.name, got, tt.want)
-		}
-	}
-}
-
 // ---- integration (needs TODOFORAI_API_KEY) ----
 
 func newTestFs(t *testing.T) *Fs {
@@ -100,7 +90,7 @@ func TestIntegrationUploadAndDelete(t *testing.T) {
 	f := newTestFs(t)
 	ctx := context.Background()
 
-	obj, err := f.upload(ctx, "rclone-test.txt", strings.NewReader("hello"), 5)
+	obj, err := f.upload(ctx, "rclone-test.txt", strings.NewReader("hello"), "text/plain")
 	if err != nil {
 		t.Fatal(err)
 	}
