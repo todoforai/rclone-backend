@@ -90,7 +90,7 @@ func TestIntegrationUploadAndDelete(t *testing.T) {
 	f := newTestFs(t)
 	ctx := context.Background()
 
-	obj, err := f.upload(ctx, "rclone-test.txt", strings.NewReader("hello"), "text/plain")
+	obj, err := f.upload(ctx, "rclone-test.txt", strings.NewReader("hello"))
 	if err != nil {
 		t.Fatal(err)
 	}

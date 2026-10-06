@@ -305,7 +305,7 @@ func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
 
 // Put uploads a new file.
 func (f *Fs) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (fs.Object, error) {
-	return f.upload(ctx, src.Remote(), in, fs.MimeType(ctx, src))
+	return f.upload(ctx, src.Remote(), in)
 }
 
 // Move renames src to remote server-side, overwriting any existing target.
@@ -389,7 +389,7 @@ func (f *Fs) Rmdir(ctx context.Context, dir string) error {
 
 // ---- upload (shared by Put and Update) ----
 
-func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, mt string) (*Object, error) {
+func (f *Fs) upload(ctx context.Context, remote string, in io.Reader) (*Object, error) {
 	full := f.root
 	if remote != "" {
 		if full != "" {
@@ -399,9 +399,9 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, mt string)
 	}
 	name := f.opt.Enc.Encode(path.Base(full))
 
-	// Build multipart form fields. rclone's multipart file part is always
-	// application/octet-stream, so the real type travels as a field.
-	params := url.Values{"mime": {mt}}
+	// Build multipart form fields. The file part is always application/octet-stream
+	// (rclone's CreateFormFile); the backend derives the type from the filename.
+	params := url.Values{}
 	if isTodo(full) {
 		parts := strings.SplitN(full, "/", 3) // todos/<id>/...
 		if len(parts) >= 2 {
@@ -436,7 +436,7 @@ func (f *Fs) upload(ctx context.Context, remote string, in io.Reader, mt string)
 	if err != nil {
 		return nil, fmt.Errorf("upload: %w", err)
 	}
-	return &Object{fs: f, remote: remote, size: res.FileSize, modTime: time.UnixMilli(res.CreatedAt), mimeType: mt, uri: res.URI, id: res.AttachmentID}, nil
+	return &Object{fs: f, remote: remote, size: res.FileSize, modTime: time.UnixMilli(res.CreatedAt), uri: res.URI, id: res.AttachmentID}, nil
 }
 
 // ---- fs.Object ----
@@ -473,7 +473,7 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (io.ReadClo
 
 // Update replaces the object contents.
 func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) error {
-	obj, err := o.fs.upload(ctx, o.remote, in, fs.MimeType(ctx, src))
+	obj, err := o.fs.upload(ctx, o.remote, in)
 	if err != nil {
 		return err
 	}
