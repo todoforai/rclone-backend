@@ -471,13 +471,30 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (io.ReadClo
 	return resp.Body, nil
 }
 
-// Update replaces the object contents.
+// Update replaces the object contents in place: same attachment id, so chats and
+// previews that reference the file see the new bytes instead of a new copy.
 func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) error {
-	obj, err := o.fs.upload(ctx, o.remote, in)
+	opts := rest.Opts{
+		Method:      "PUT",
+		Path:        "/api/v1/resources",
+		Parameters:  url.Values{"uri": {o.uri}},
+		Body:        in,
+		ContentType: "application/octet-stream",
+		NoResponse:  true,
+	}
+	// CallNoRetry: the stream is consumed on the first attempt (see upload).
+	err := o.fs.pacer.CallNoRetry(func() (bool, error) {
+		resp, err := o.fs.srv.Call(ctx, &opts)
+		return shouldRetry(ctx, resp, err)
+	})
+	if err != nil {
+		return fmt.Errorf("update: %w", err)
+	}
+	item, err := o.fs.metadata(ctx, o.uri)
 	if err != nil {
 		return err
 	}
-	o.size, o.modTime, o.uri, o.id = obj.size, obj.modTime, obj.uri, obj.id
+	o.size, o.modTime = item.FileSize, msToTime(item.ModifiedAt, item.CreatedAt)
 	return nil
 }
 
