@@ -303,9 +303,18 @@ func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
 	return &Object{fs: f, remote: remote, size: item.FileSize, modTime: msToTime(item.ModifiedAt, item.CreatedAt), mimeType: item.MimeType, uri: item.URI, id: item.ID}, nil
 }
 
-// Put uploads a new file.
+// Put writes the file at remote: over the existing one in place (same id), else as a new one.
+// Editors save via a temp file renamed in the VFS cache, which then uploads with Put, not Update.
 func (f *Fs) Put(ctx context.Context, in io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (fs.Object, error) {
-	return f.upload(ctx, src.Remote(), in)
+	o, err := f.NewObject(ctx, src.Remote())
+	switch err {
+	case nil:
+		return o, o.Update(ctx, in, src, options...)
+	case fs.ErrorObjectNotFound:
+		return f.upload(ctx, src.Remote(), in)
+	default:
+		return nil, err
+	}
 }
 
 // Move renames src to remote server-side, overwriting any existing target.
